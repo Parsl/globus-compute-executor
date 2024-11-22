@@ -1,0 +1,99 @@
+name: GlobusComputeExecutor tests
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+env:
+  PYTHON_VERSION: 3.11
+
+jobs:
+  main-test-suite:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 60
+
+    steps:
+    - uses: actions/checkout@master
+
+    - name: Set up Python Environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Collect Job Information
+      id: job-info
+      run: |
+        echo "Python Version: ${{ env.PYTHON_VERSION }} " >> ci_job_info.txt
+        echo "CI Triggering Event: ${{ github.event_name }}" >> ci_job_info.txt
+        echo "Triggering Git Ref: ${{ github.ref }}" >> ci_job_info.txt
+        echo "Triggering Git SHA: ${{ github.sha }}" >> ci_job_info.txt
+        echo "Workflow Run: ${{ github.run_number }}" >> ci_job_info.txt
+        echo "Workflow Attempt: ${{ github.run_attempt }}" >> ci_job_info.txt
+        as_ascii="$(echo "${{ github.ref_name }}" | perl -pe "s/[^A-z0-9-]+/-/g; s/^-+|-+\$//g; s/--+/-/g;")"
+        echo "as-ascii=$as_ascii" >> $GITHUB_OUTPUT
+
+    - name: setup virtual env
+      run: |
+        make virtualenv
+        source .venv/bin/activate
+
+    - name: make deps clean_coverage
+      run: |
+        source .venv/bin/activate
+        pip3 install .
+
+    - name: start globus_compute_endpoint
+      env:
+        GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
+        GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
+      run: |
+        source /home/runner/work/parsl/parsl/.venv/bin/activate
+        globus-compute-endpoint configure default
+        which globus-compute-endpoint
+        python3 -c "import globus_compute_sdk; print(globus_compute_sdk.__version__)"
+        python3 -c "import globus_compute_endpoint; print(globus_compute_endpoint.__version__)"
+        cat << EOF > /home/runner/.globus_compute/default/config.yaml
+        engine:
+          type: ThreadPoolEngine
+          max_workers: 4
+        EOF
+        cat /home/runner/.globus_compute/default/config.yaml
+        mkdir ~/.globus_compute/default/tasks_working_dir
+        globus-compute-endpoint start default
+        globus-compute-endpoint list
+
+    - name: mypy
+      run: |
+        tox -e mypy
+    - name: make test
+      env:
+        GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
+        GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
+      run: |
+        source .venv/bin/activate
+        export GLOBUS_COMPUTE_ENDPOINT=$(globus-compute-endpoint list | grep default | cut -c 3-38)
+        echo "GLOBUS_COMPUTE_ENDPOINT = $GLOBUS_COMPUTE_ENDPOINT"
+
+        tox -e mypy
+
+
+    - name: stop globus_compute_endpoint
+      env:
+        GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
+        GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
+      run: |
+        source /home/runner/work/parsl/parsl/.venv/bin/activate
+        globus-compute-endpoint stop default
+
+    - name: Archive runinfo logs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: runinfo-${{ env.PYTHON_VERSION }}-${{ steps.job-info.outputs.as-ascii }}-${{ github.sha }}
+        path: |
+          runinfo/
+          pytest-parsl/
+          ci_job_info.txt
+        compression-level: 9
