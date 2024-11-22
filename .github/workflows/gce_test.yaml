@@ -34,22 +34,15 @@ jobs:
         as_ascii="$(echo "${{ github.ref_name }}" | perl -pe "s/[^A-z0-9-]+/-/g; s/^-+|-+\$//g; s/--+/-/g;")"
         echo "as-ascii=$as_ascii" >> $GITHUB_OUTPUT
 
-    - name: setup virtual env
-      run: |
-        make virtualenv
-        source .venv/bin/activate
-
-    - name: make deps clean_coverage
-      run: |
-        source .venv/bin/activate
-        pip3 install .
-
     - name: start globus_compute_endpoint
       env:
         GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
         GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
       run: |
-        source /home/runner/work/parsl/parsl/.venv/bin/activate
+        python3 -m venv
+        source .venv/bin/activate
+        pip install globus-compute-endpoint
+
         globus-compute-endpoint configure default
         which globus-compute-endpoint
         python3 -c "import globus_compute_sdk; print(globus_compute_sdk.__version__)"
