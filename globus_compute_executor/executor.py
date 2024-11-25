@@ -1,13 +1,12 @@
+from __future__ import annotations
+
 import copy
-import uuid
 from concurrent.futures import Future
 from typing import Any, Callable
 
 from globus_compute_sdk import Executor
 from parsl.executors.base import ParslExecutor
 from parsl.utils import RepresentationMixin
-
-UUID_LIKE_T = uuid.UUID | str
 
 
 class GlobusComputeExecutor(ParslExecutor, RepresentationMixin):
@@ -76,7 +75,7 @@ class GlobusComputeExecutor(ParslExecutor, RepresentationMixin):
         func: Callable,
         resource_specification: dict[str, Any],
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Future:
         """Submit func to globus-compute
 

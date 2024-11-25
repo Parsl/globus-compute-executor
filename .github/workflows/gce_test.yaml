@@ -34,22 +34,16 @@ jobs:
         as_ascii="$(echo "${{ github.ref_name }}" | perl -pe "s/[^A-z0-9-]+/-/g; s/^-+|-+\$//g; s/--+/-/g;")"
         echo "as-ascii=$as_ascii" >> $GITHUB_OUTPUT
 
-    - name: setup virtual env
+    - name: install dependencies
       run: |
-        make virtualenv
-        source .venv/bin/activate
-
-    - name: make deps clean_coverage
-      run: |
-        source .venv/bin/activate
-        pip3 install .
+        python3 -m pip install -U pip
+        python3 -m pip install pre-commit tox globus-compute-endpoint
 
     - name: start globus_compute_endpoint
       env:
         GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
         GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
       run: |
-        source /home/runner/work/parsl/parsl/.venv/bin/activate
         globus-compute-endpoint configure default
         which globus-compute-endpoint
         python3 -c "import globus_compute_sdk; print(globus_compute_sdk.__version__)"
@@ -67,33 +61,19 @@ jobs:
     - name: mypy
       run: |
         tox -e mypy
-    - name: make test
+
+    - name: run tests
       env:
         GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
         GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
       run: |
-        source .venv/bin/activate
         export GLOBUS_COMPUTE_ENDPOINT=$(globus-compute-endpoint list | grep default | cut -c 3-38)
         echo "GLOBUS_COMPUTE_ENDPOINT = $GLOBUS_COMPUTE_ENDPOINT"
-
-        tox -e mypy
-
+        tox -e py
 
     - name: stop globus_compute_endpoint
       env:
         GLOBUS_COMPUTE_CLIENT_ID: ${{ secrets.GLOBUS_COMPUTE_CLIENT_ID }}
         GLOBUS_COMPUTE_CLIENT_SECRET: ${{ secrets.GLOBUS_COMPUTE_SECRET_KEY }}
       run: |
-        source /home/runner/work/parsl/parsl/.venv/bin/activate
         globus-compute-endpoint stop default
-
-    - name: Archive runinfo logs
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: runinfo-${{ env.PYTHON_VERSION }}-${{ steps.job-info.outputs.as-ascii }}-${{ github.sha }}
-        path: |
-          runinfo/
-          pytest-parsl/
-          ci_job_info.txt
-        compression-level: 9
