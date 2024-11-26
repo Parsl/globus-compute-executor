@@ -38,6 +38,7 @@ jobs:
       run: |
         python3 -m pip install -U pip
         python3 -m pip install pre-commit tox globus-compute-endpoint
+        python3 -m pip install .
 
     - name: start globus_compute_endpoint
       env:
